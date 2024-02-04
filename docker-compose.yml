@@ -70,13 +70,15 @@ services:
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata01:/usr/share/elasticsearch/data
+      - ./backups:/usr/share/elasticsearch/backups
     ports:
-      - ${ES_PORT}:9200
+      - 9201:9200
     environment:
       - node.name=es01
       - cluster.name=${CLUSTER_NAME}
       - cluster.initial_master_nodes=es01,es02,es03
       - discovery.seed_hosts=es02,es03
+      - path.repo=/usr/share/elasticsearch/backups
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
       - bootstrap.memory_lock=true
       - xpack.security.enabled=true
@@ -112,11 +114,15 @@ services:
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata02:/usr/share/elasticsearch/data
+      - ./backups:/usr/share/elasticsearch/backups
+    ports:
+      - 9202:9200 
     environment:
       - node.name=es02
       - cluster.name=${CLUSTER_NAME}
       - cluster.initial_master_nodes=es01,es02,es03
       - discovery.seed_hosts=es01,es03
+      - path.repo=/usr/share/elasticsearch/backups
       - bootstrap.memory_lock=true
       - xpack.security.enabled=true
       - xpack.security.http.ssl.enabled=true
@@ -151,11 +157,15 @@ services:
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata03:/usr/share/elasticsearch/data
+      - ./backups:/usr/share/elasticsearch/backups
+    ports:
+      - 9203:9200
     environment:
       - node.name=es03
       - cluster.name=${CLUSTER_NAME}
       - cluster.initial_master_nodes=es01,es02,es03
       - discovery.seed_hosts=es01,es02
+      - path.repo=/usr/share/elasticsearch/backups
       - bootstrap.memory_lock=true
       - xpack.security.enabled=true
       - xpack.security.http.ssl.enabled=true
@@ -214,6 +224,53 @@ services:
       timeout: 10s
       retries: 120
 
+  logstash:
+   depends_on:
+     es01:
+       condition: service_healthy
+     kibana:
+       condition: service_healthy
+   image: docker.elastic.co/logstash/logstash:${STACK_VERSION}
+   labels:
+     co.elastic.logs/module: logstash
+   user: root
+   volumes:
+     - logstashdata01:/usr/share/logstash/data
+     - certs:/usr/share/logstash/certs
+     - ./mysql-connector:/usr/share/logstash/mysql-connector
+     - ./jdbc.conf:/usr/share/logstash/pipeline/jdbc.conf
+   environment:
+     - NODE_NAME="logstash"
+     - xpack.monitoring.enabled=false
+     - ELASTIC_USER=elastic
+     - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+     - ELASTIC_HOSTS=https://es01:9200
+   command: >
+    bash -c "
+    dpkg -i /usr/share/logstash/mysql-connector/mysql-connector-j_8.1.0-1debian11_all.deb && 
+    sleep 5 && logstash -f /usr/share/logstash/pipeline/jdbc.conf
+    "    
+   ports:
+     - "5044:5044"
+   mem_limit: ${LS_MEM_LIMIT}
+
+  db:
+    image: mysql:latest
+    environment:
+      - MYSQL_DATABASE=MYSQL_LOGSTASH_ELASTIC
+      - MYSQL_ROOT_PASSWORD=my-pass
+    ports:
+      - "33060:3306"    
+    volumes:
+      - db-volume:/var/lib/mysql
+
+networks:
+ default:
+   name: elasticcluster
+   external: false
+
+
+
 volumes:
   certs:
     driver: local
@@ -224,4 +281,8 @@ volumes:
   esdata03:
     driver: local
   kibanadata:
+    driver: local
+  logstashdata01:
+    driver: local
+  db-volume:
     driver: local
