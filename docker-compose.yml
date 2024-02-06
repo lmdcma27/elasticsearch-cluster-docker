@@ -255,14 +255,15 @@ services:
    mem_limit: ${LS_MEM_LIMIT}
 
   db:
-    image: mysql:latest
+    image: mariadb:10.3.39
     environment:
       - MYSQL_DATABASE=MYSQL_LOGSTASH_ELASTIC
       - MYSQL_ROOT_PASSWORD=my-pass
     ports:
-      - "33060:3306"    
+      - "33060:3306"
     volumes:
       - db-volume:/var/lib/mysql
+
 
 networks:
  default:
